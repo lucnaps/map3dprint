@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Map → 3D Print</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0c0c0c;color:#e0e0e0;display:flex;flex-direction:column;}
+#stepbar{display:flex;background:#111;border-bottom:1px solid #1e1e1e;height:50px;flex-shrink:0;}
+.step{display:flex;align-items:center;gap:9px;padding:0 20px;cursor:pointer;border-right:1px solid #1a1a1a;flex:1;justify-content:center;transition:background .15s;user-select:none;}
+.step:hover{background:#161616;}
+.step.active{background:#0f1f18;border-bottom:2px solid #1D9E75;}
+.step-num{width:22px;height:22px;border-radius:50%;border:1.5px solid #333;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#444;font-family:'DM Mono',monospace;flex-shrink:0;}
+.step.active .step-num{border-color:#1D9E75;color:#1D9E75;}
+.step.done .step-num{background:#1D9E75;border-color:#1D9E75;color:#fff;}
+.step-title{font-size:11px;font-weight:500;color:#555;}
+.step.active .step-title{color:#ddd;}
+.step.done .step-title{color:#888;}
+.step-sub{font-size:10px;color:#333;}
+#main{display:flex;flex:1;overflow:hidden;min-height:0;}
+#sidebar{width:272px;min-width:272px;background:#111;border-right:1px solid #1a1a1a;display:flex;flex-direction:column;overflow:hidden;}
+#sscroll{flex:1;overflow-y:auto;overflow-x:hidden;}
+#sscroll::-webkit-scrollbar{width:3px;}
+#sscroll::-webkit-scrollbar-thumb{background:#222;}
+#right{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+.sec{padding:11px 14px;border-bottom:1px solid #181818;}
+.sec-label{font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#333;margin-bottom:8px;font-family:'DM Mono',monospace;}
+.row2{display:flex;align-items:center;gap:5px;margin-bottom:6px;}
+.ni{flex:1;padding:5px 8px;font-size:12px;border:1px solid #222;border-radius:5px;background:#161616;color:#ddd;outline:none;text-align:center;font-family:'DM Mono',monospace;width:0;}
+.ni:focus{border-color:#1D9E75;}
+.sep{font-size:11px;color:#333;flex-shrink:0;}
+.ai{width:56px;padding:5px 8px;font-size:12px;border:1px solid #222;border-radius:5px;background:#161616;color:#ddd;outline:none;text-align:center;font-family:'DM Mono',monospace;}
+.ai:focus{border-color:#1D9E75;}
+.ibox{background:#141414;border:1px solid #1e1e1e;border-radius:5px;padding:7px 9px;margin-bottom:7px;}
+.ir{display:flex;justify-content:space-between;margin-bottom:2px;}
+.il{font-size:10px;color:#333;font-family:'DM Mono',monospace;}
+.iv{font-size:10px;font-weight:500;color:#999;font-family:'DM Mono',monospace;}
+.trow{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.tlabel{font-size:12px;color:#aaa;}
+.tog{position:relative;width:32px;height:17px;flex-shrink:0;}
+.tog input{display:none;}
+.tt{position:absolute;inset:0;border-radius:9px;background:#222;cursor:pointer;transition:background .15s;}
+.tog input:checked+.tt{background:#1D9E75;}
+.th{position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:left .15s;pointer-events:none;}
+.tog input:checked~.th{left:17px;}
+.srow{margin-bottom:8px;}
+.shead{display:flex;justify-content:space-between;margin-bottom:3px;}
+.sname{font-size:11px;color:#555;}
+.sval{font-size:11px;font-weight:500;color:#ccc;font-family:'DM Mono',monospace;}
+.snote{font-size:10px;color:#2a2a2a;margin-bottom:3px;font-family:'DM Mono',monospace;}
+input[type=range]{width:100%;height:2px;-webkit-appearance:none;background:#222;border-radius:2px;outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#ccc;cursor:pointer;}
+.btn{width:100%;padding:9px;font-size:11px;font-weight:500;border:1px solid #222;border-radius:6px;background:#161616;color:#ccc;cursor:pointer;transition:all .15s;margin-bottom:5px;font-family:'DM Sans',sans-serif;}
+.btn:hover{background:#1c1c1c;border-color:#333;}
+.btn.primary{background:#1D9E75;color:#fff;border-color:#1D9E75;}
+.btn.primary:hover{background:#199065;}
+.btn.ghost{background:transparent;border-color:#1D9E75;color:#1D9E75;}
+.btn.ghost:hover{background:#0a1f16;}
+.btn:disabled{opacity:.25;cursor:not-allowed;}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;}
+.pb{padding:5px 3px;font-size:10px;border:1px solid #1a1a1a;border-radius:5px;background:#141414;color:#555;cursor:pointer;text-align:center;transition:all .12s;font-family:'DM Mono',monospace;}
+.pb:hover{border-color:#2a2a2a;color:#999;}
+#split-grid{display:grid;gap:2px;margin-top:5px;background:#1e1e1e;border-radius:3px;padding:2px;}
+.sc{background:#0f1f18;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#1D9E75;min-height:15px;font-family:'DM Mono',monospace;}
+#split-note{font-size:10px;color:#2a2a2a;margin-top:3px;font-family:'DM Mono',monospace;}
+#statusbar{padding:7px 14px;font-size:11px;color:#333;border-top:1px solid #181818;flex-shrink:0;font-family:'DM Mono',monospace;min-height:32px;display:flex;align-items:center;gap:8px;}
+#status-spinner{display:none;width:10px;height:10px;border:1.5px solid #333;border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.panel{display:none;flex-direction:column;}
+.panel.active{display:flex;}
+#mapwrap{flex:1;position:relative;display:flex;flex-direction:column;min-height:0;}
+#map{flex:1;}
+#mhint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(10,10,10,0.85);border:1px solid #2a2a2a;border-radius:6px;padding:5px 12px;font-size:10px;color:#444;pointer-events:none;z-index:999;white-space:nowrap;font-family:'DM Mono',monospace;}
+#preview{flex:1;display:none;position:relative;background:#060606;}
+#pcanvas{width:100%;height:100%;display:block;}
+#phint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(10,10,10,0.85);border:1px solid #2a2a2a;border-radius:6px;padding:5px 12px;font-size:10px;color:#444;pointer-events:none;font-family:'DM Mono',monospace;}
+.chip{display:inline-block;font-size:9px;padding:2px 6px;border-radius:8px;background:#0f2a1d;color:#1D9E75;font-weight:500;margin-left:4px;font-family:'DM Mono',monospace;}
+</style>
+</head>
+<body>
+
+<div id="stepbar">
+  <div class="step active" id="st1" onclick="goStep(1)">
+    <div class="step-num" id="sn1">1</div>
+    <div><div class="step-title">Select area</div><div class="step-sub">Position & size</div></div>
+  </div>
+  <div class="step" id="st2" onclick="goStep(2)">
+    <div class="step-num" id="sn2">2</div>
+    <div><div class="step-title">Adjust & preview</div><div class="step-sub">Heights · 3D view</div></div>
+  </div>
+  <div class="step" id="st3" onclick="goStep(3)">
+    <div class="step-num" id="sn3">3</div>
+    <div><div class="step-title">Export</div><div class="step-sub">STL · split</div></div>
+  </div>
+</div>
+
+<div id="main">
+<div id="sidebar">
+<div id="sscroll">
+
+  <div class="panel active" id="p1">
+    <div class="sec">
+      <div class="sec-label">Print size</div>
+      <div class="row2">
+        <input class="ni" id="pw" type="number" value="150" min="10" max="500" oninput="onSzW()">
+        <span class="sep">×</span>
+        <input class="ni" id="ph" type="number" value="150" min="10" max="500" oninput="onSzH()">
+        <span class="sep" style="font-size:10px;">mm</span>
+      </div>
+      <div class="row2" style="margin-bottom:4px;">
+        <span style="font-size:11px;color:#444;">Angle</span>
+        <input class="ai" id="ang" type="number" value="0" min="-180" max="180" step="0.5" oninput="onAng(this.value)">
+        <span style="font-size:10px;color:#2a2a2a;">° (Manhattan 29°)</span>
+      </div>
+      <div id="scaleinfo" class="ibox" style="display:none;">
+        <div class="ir"><span class="il">Area</span><span class="iv" id="ib-a">—</span></div>
+        <div class="ir"><span class="il">Scale</span><span class="iv" id="ib-s">—</span></div>
+        <div class="ir"><span class="il">1mm =</span><span class="iv" id="ib-m">—</span></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-label">Jump to</div>
+      <div class="pgrid">
+        <div class="pb" onclick="flyTo(40.6960,-73.9930)">DUMBO</div>
+        <div class="pb" onclick="flyTo(40.6782,-73.9442)">Park Slope</div>
+        <div class="pb" onclick="flyTo(40.6926,-73.9851)">Downtown BK</div>
+        <div class="pb" onclick="flyTo(40.6806,-73.9990)">Carroll Gdns</div>
+        <div class="pb" onclick="flyTo(40.7614,-73.9776)">Midtown</div>
+        <div class="pb" onclick="flyTo(40.7282,-74.0776)">Hoboken</div>
+      </div>
+      <div style="font-size:10px;color:#2a2a2a;margin-top:4px;">Drag box to move · corners resize (locked) · side diamonds stretch one axis · green dot rotates</div>
+    </div>
+    <div class="sec" style="flex:1;"></div>
+    <div class="sec">
+      <button class="btn primary" id="btn-gen" onclick="generate()">Generate mesh →</button>
+    </div>
+  </div>
+
+  <div class="panel" id="p2">
+    <div class="sec">
+      <div class="sec-label">Layers</div>
+      <div class="trow"><span class="tlabel">Buildings</span><label class="tog"><input type="checkbox" id="tB" checked onchange="onLayer()"><div class="tt"></div><div class="th"></div></label></div>
+      <div class="trow"><span class="tlabel">Roads</span><label class="tog"><input type="checkbox" id="tR" checked onchange="onLayer()"><div class="tt"></div><div class="th"></div></label></div>
+      <div class="trow"><span class="tlabel">Water (cutout)</span><label class="tog"><input type="checkbox" id="tW" checked onchange="onLayer()"><div class="tt"></div><div class="th"></div></label></div>
+      <div class="trow"><span class="tlabel">Parks</span><label class="tog"><input type="checkbox" id="tP" checked onchange="onLayer()"><div class="tt"></div><div class="th"></div></label></div>
+      <div class="trow"><span class="tlabel">Terrain elevation</span><label class="tog"><input type="checkbox" id="tT" checked onchange="onLayer()"><div class="tt"></div><div class="th"></div></label></div>
+    </div>
+    <div class="sec">
+      <div class="sec-label">Heights <span class="chip">0.4mm nozzle</span></div>
+      <div id="scnote" style="font-size:10px;color:#2a2a2a;margin-bottom:7px;font-family:'DM Mono',monospace;">auto-scaled to area</div>
+      <div class="srow">
+        <div class="shead"><span class="sname">Base plate</span><span class="sval" id="v-ba">2.0mm</span></div>
+        <input type="range" id="s-ba" min="1" max="6" step="0.2" value="2.0" oninput="onSl('base',this.value)">
+      </div>
+      <div class="srow">
+        <div class="shead"><span class="sname">Road raise</span><span class="sval" id="v-ro">0.6mm</span></div>
+        <div class="snote" id="n-ro">3 layers</div>
+        <input type="range" id="s-ro" min="0.2" max="2" step="0.2" value="0.6" oninput="onSl('roads',this.value)">
+      </div>
+      <div class="srow">
+        <div class="shead"><span class="sname">Park raise</span><span class="sval" id="v-pa">0.4mm</span></div>
+        <div class="snote" id="n-pa">2 layers</div>
+        <input type="range" id="s-pa" min="0.2" max="1.2" step="0.2" value="0.4" oninput="onSl('parks',this.value)">
+      </div>
+      <div class="srow">
+        <div class="shead"><span class="sname">Building scale ×</span><span class="sval" id="v-bl">1.0×</span></div>
+        <input type="range" id="s-bl" min="0.2" max="4" step="0.1" value="1.0" oninput="onSl('bldg',this.value)">
+      </div>
+      <div class="srow">
+        <div class="shead"><span class="sname">Terrain scale ×</span><span class="sval" id="v-te">3.0×</span></div>
+        <input type="range" id="s-te" min="1" max="10" step="0.5" value="3.0" oninput="onSl('terrain',this.value)">
+      </div>
+    </div>
+    <div class="sec">
+      <button class="btn ghost" id="btn3d" onclick="toggle3D()">View 3D mesh</button>
+      <button class="btn" onclick="goStep(1)">← Back to map</button>
+      <button class="btn primary" onclick="goStep(3)" style="margin-top:4px;">Continue to export →</button>
+    </div>
+  </div>
+
+  <div class="panel" id="p3">
+    <div class="sec">
+      <div class="sec-label">Split into pieces</div>
+      <div class="row2">
+        <span class="sep">Cols</span>
+        <input class="ni" id="scols" type="number" value="1" min="1" max="10" oninput="updSplit()">
+        <span class="sep">×</span>
+        <span class="sep">Rows</span>
+        <input class="ni" id="srows" type="number" value="1" min="1" max="10" oninput="updSplit()">
+      </div>
+      <div id="split-grid"></div>
+      <div id="split-note"></div>
+    </div>
+    <div class="sec" style="flex:1;"></div>
+    <div class="sec">
+      <button class="btn primary" onclick="exportSTL()">Download STL</button>
+      <button class="btn" onclick="goStep(2)">← Back</button>
+    </div>
+  </div>
+
+</div>
+<div id="statusbar"><div id="status-spinner"></div><span id="status-text">Position the green box then generate mesh</span></div>
+</div>
+
+<div id="right">
+  <div id="mapwrap">
+    <div id="map"></div>
+    <canvas id="oc" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:600;pointer-events:none;"></canvas>
+    <canvas id="dc" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:500;pointer-events:none;"></canvas>
+    <canvas id="ic" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:700;"></canvas>
+    <div id="mhint">scroll to zoom · drag outside box to pan · drag inside box to move it</div>
+  </div>
+  <div id="preview">
+    <canvas id="pcanvas"></canvas>
+    <div id="phint">drag to orbit · scroll to zoom · right-drag to pan</div>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════════
+const map=L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([40.6782,-73.9442],15);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © CARTO',maxZoom:19
+}).addTo(map);
+
+// ══════════════════════════════════════════════
+// CANVASES
+// ══════════════════════════════════════════════
+const mw=document.getElementById('mapwrap');
+const oc=document.getElementById('oc'),dc=document.getElementById('dc'),ic=document.getElementById('ic');
+function rsz(){const W=mw.offsetWidth,H=mw.offsetHeight;[oc,dc,ic].forEach(c=>{c.width=W;c.height=H;});}
+rsz();
+window.addEventListener('resize',()=>{rsz();redraw();});
+
+// ══════════════════════════════════════════════
+// BOX STATE — real-world metres
+// ══════════════════════════════════════════════
+let box={lat:40.6782,lng:-73.9442,rW:500,rH:500,ang:0};
+let pW=150,pH=150;
+function syncAsp(){box.rW=box.rH*(pW/pH);}
+
+function mToPx(m,lat){
+  const z=map.getZoom(),crs=map.options.crs;
+  const a=crs.latLngToPoint(L.latLng(lat,0),z),b=crs.latLngToPoint(L.latLng(lat,0.001),z);
+  return m*(Math.abs(b.x-a.x)/(111320*Math.cos(lat*Math.PI/180)));
+}
+function pxToM(px,lat){
+  const z=map.getZoom(),crs=map.options.crs;
+  const a=crs.latLngToPoint(L.latLng(lat,0),z),b=crs.latLngToPoint(L.latLng(lat,0.001),z);
+  return px/(Math.abs(b.x-a.x)/(111320*Math.cos(lat*Math.PI/180)));
+}
+function getSB(){
+  const cp=map.latLngToContainerPoint([box.lat,box.lng]);
+  return{cx:cp.x,cy:cp.y,sw:mToPx(box.rW,box.lat),sh:mToPx(box.rH,box.lat)};
+}
+function getC(){
+  const{cx,cy,sw,sh}=getSB(),hw=sw/2,hh=sh/2;
+  const cos=Math.cos(box.ang),sin=Math.sin(box.ang);
+  const r=(dx,dy)=>[cx+dx*cos-dy*sin,cy+dx*sin+dy*cos];
+  return{tl:r(-hw,-hh),tr:r(hw,-hh),br:r(hw,hh),bl:r(-hw,hh),cx,cy,sw,sh};
+}
+function getBB(){
+  const{cx,cy,sw,sh}=getSB(),hw=sw/2,hh=sh/2;
+  const cos=Math.cos(box.ang),sin=Math.sin(box.ang);
+  const cs=[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy])=>
+    map.containerPointToLatLng([cx+dx*cos-dy*sin,cy+dx*sin+dy*cos]));
+  return{S:Math.min(...cs.map(c=>c.lat)),N:Math.max(...cs.map(c=>c.lat)),
+         W:Math.min(...cs.map(c=>c.lng)),E:Math.max(...cs.map(c=>c.lng))};
+}
+
+// ══════════════════════════════════════════════
+// DRAW RECT
+// ══════════════════════════════════════════════
+function drawRect(){
+  rsz();
+  const ctx=oc.getContext('2d');
+  ctx.clearRect(0,0,oc.width,oc.height);
+  const c=getC(),pts=[c.tl,c.tr,c.br,c.bl];
+  ctx.save();
+  ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));ctx.closePath();
+  ctx.fillStyle='rgba(29,158,117,0.07)';ctx.fill();
+  ctx.strokeStyle='#1D9E75';ctx.lineWidth=1.5;ctx.stroke();
+  // Corner handles
+  pts.forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='#1D9E75';ctx.fill();});
+  // Side diamond handles
+  [[c.tl,c.tr],[c.tr,c.br],[c.br,c.bl],[c.bl,c.tl]].forEach(([a,b])=>{
+    const x=(a[0]+b[0])/2,y=(a[1]+b[1])/2,s=4;
+    ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();
+    ctx.fillStyle='rgba(29,158,117,0.8)';ctx.fill();
+  });
+  // Rotation handle
+  const mx=(c.tl[0]+c.tr[0])/2,my=(c.tl[1]+c.tr[1])/2;
+  const rx=mx+Math.cos(box.ang-Math.PI/2)*(-30),ry=my+Math.sin(box.ang-Math.PI/2)*(-30);
+  ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(rx,ry);ctx.strokeStyle='rgba(29,158,117,0.5)';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#1D9E75';ctx.fill();
+  // Split lines
+  const cols=parseInt(document.getElementById('scols').value)||1;
+  const rows=parseInt(document.getElementById('srows').value)||1;
+  if(cols>1||rows>1){
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));ctx.closePath();ctx.clip();
+    ctx.strokeStyle='rgba(29,158,117,0.35)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    for(let i=1;i<cols;i++){const t=i/cols;ctx.beginPath();ctx.moveTo(c.tl[0]+(c.tr[0]-c.tl[0])*t,c.tl[1]+(c.tr[1]-c.tl[1])*t);ctx.lineTo(c.bl[0]+(c.br[0]-c.bl[0])*t,c.bl[1]+(c.br[1]-c.bl[1])*t);ctx.stroke();}
+    for(let i=1;i<rows;i++){const t=i/rows;ctx.beginPath();ctx.moveTo(c.tl[0]+(c.bl[0]-c.tl[0])*t,c.tl[1]+(c.bl[1]-c.tl[1])*t);ctx.lineTo(c.tr[0]+(c.br[0]-c.tr[0])*t,c.tr[1]+(c.br[1]-c.tr[1])*t);ctx.stroke();}
+    ctx.restore();
+  }
+  // Label
+  ctx.font='500 10px "DM Mono",monospace';ctx.textAlign='center';ctx.fillStyle='rgba(29,158,117,0.7)';
+  ctx.fillText(`${pW}×${pH}mm`,c.cx,c.cy+c.sh/2+13);
+  ctx.restore();
+  updScaleInfo();
+}
+
+function updScaleInfo(){
+  const sn=Math.round(Math.max(box.rW,box.rH)/Math.max(pW,pH)*1000);
+  const mpm=Math.max(box.rW/pW,box.rH/pH)/1000;
+  document.getElementById('ib-a').textContent=box.rW>1000?`${(box.rW/1000).toFixed(2)}×${(box.rH/1000).toFixed(2)}km`:`${Math.round(box.rW)}×${Math.round(box.rH)}m`;
+  document.getElementById('ib-s').textContent=`1:${sn.toLocaleString()}`;
+  document.getElementById('ib-m').textContent=`${(mpm*1000).toFixed(1)}m`;
+  document.getElementById('scaleinfo').style.display='block';
+  autoH(sn);
+}
+
+function autoH(sn){
+  const rp=8000/sn;
+  setSl('roads',snap(Math.max(0.4,Math.min(1.6,rp*0.08))));
+  setSl('parks',snap(Math.max(0.2,Math.min(0.8,rp*0.04))));
+  document.getElementById('scnote').textContent=`auto · 1:${Math.round(sn).toLocaleString()}`;
+}
+function snap(v){return Math.round(v/0.2)*0.2;}
+
+const H={base:2.0,roads:0.6,parks:0.4,bldg:1.0,terrain:3.0};
+const slMap={
+  base:{r:'s-ba',v:'v-ba'},
+  roads:{r:'s-ro',v:'v-ro',n:'n-ro'},
+  parks:{r:'s-pa',v:'v-pa',n:'n-pa'},
+  bldg:{r:'s-bl',v:'v-bl'},
+  terrain:{r:'s-te',v:'v-te'}
+};
+function setSl(key,val){
+  H[key]=val;
+  const m=slMap[key];
+  if(!m)return;
+  document.getElementById(m.r).value=val;
+  document.getElementById(m.v).textContent=parseFloat(val).toFixed(1)+(key==='bldg'||key==='terrain'?'×':'mm');
+  if(m.n)document.getElementById(m.n).textContent=`${Math.round(val/0.2)} layers`;
+}
+function onSl(key,val){setSl(key,parseFloat(val));if(osmData&&preview3D)rebuild3D();}
+function onLayer(){if(osmData){updateViz();if(preview3D)rebuild3D();}}
+
+// ══════════════════════════════════════════════
+// HIT TEST
+// ══════════════════════════════════════════════
+function hit(px,py){
+  const c=getC();
+  const corners=[c.tl,c.tr,c.br,c.bl];
+  for(let i=0;i<corners.length;i++)if(Math.hypot(px-corners[i][0],py-corners[i][1])<10)return{t:'corner',i};
+  const sides=[
+    {n:'top',x:(c.tl[0]+c.tr[0])/2,y:(c.tl[1]+c.tr[1])/2},
+    {n:'right',x:(c.tr[0]+c.br[0])/2,y:(c.tr[1]+c.br[1])/2},
+    {n:'bottom',x:(c.br[0]+c.bl[0])/2,y:(c.br[1]+c.bl[1])/2},
+    {n:'left',x:(c.bl[0]+c.tl[0])/2,y:(c.bl[1]+c.tl[1])/2},
+  ];
+  for(const s of sides)if(Math.hypot(px-s.x,py-s.y)<10)return{t:'side',n:s.n};
+  const mx=(c.tl[0]+c.tr[0])/2,my=(c.tl[1]+c.tr[1])/2;
+  const rx=mx+Math.cos(box.ang-Math.PI/2)*(-30),ry=my+Math.sin(box.ang-Math.PI/2)*(-30);
+  if(Math.hypot(px-rx,py-ry)<11)return{t:'rot'};
+  const cos=Math.cos(-box.ang),sin=Math.sin(-box.ang),dx=px-c.cx,dy=py-c.cy;
+  if(Math.abs(dx*cos-dy*sin)<c.sw/2&&Math.abs(dx*sin+dy*cos)<c.sh/2)return{t:'move'};
+  return null;
+}
+
+let drag={on:false};
+ic.style.pointerEvents='auto';
+
+ic.addEventListener('mousedown',e=>{
+  const r=ic.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+  const h=hit(px,py);
+  if(!h){map.dragging.enable();map.scrollWheelZoom.enable();return;}
+  e.preventDefault();e.stopPropagation();
+  map.dragging.disable();map.scrollWheelZoom.disable();
+  drag={on:true,t:h.t,n:h.n,spx:px,spy:py,olat:box.lat,olng:box.lng,orW:box.rW,orH:box.rH};
+});
+
+ic.addEventListener('mousemove',e=>{
+  const r=ic.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+  if(!drag.on){
+    const h=hit(px,py);
+    ic.style.cursor=h?(h.t==='rot'?'crosshair':h.t==='side'?(h.n==='top'||h.n==='bottom'?'ns-resize':'ew-resize'):h.t==='corner'?'nwse-resize':'grab'):'default';
+    return;
+  }
+  const dpx=px-drag.spx,dpy=py-drag.spy;
+  if(drag.t==='move'){
+    const ocp=map.latLngToContainerPoint([drag.olat,drag.olng]);
+    const np=map.containerPointToLatLng([ocp.x+dpx,ocp.y+dpy]);
+    box.lat=np.lat;box.lng=np.lng;
+  } else if(drag.t==='rot'){
+    const cp=map.latLngToContainerPoint([box.lat,box.lng]);
+    box.ang=Math.atan2(py-cp.y,px-cp.x)+Math.PI/2;
+    document.getElementById('ang').value=Math.round(box.ang*180/Math.PI*10)/10;
+  } else if(drag.t==='corner'){
+    const cp=map.latLngToContainerPoint([box.lat,box.lng]);
+    const cos=Math.cos(-box.ang),sin=Math.sin(-box.ang),dx=px-cp.x,dy=py-cp.y;
+    const nW=pxToM(Math.abs(dx*cos-dy*sin)*2,box.lat),nH=pxToM(Math.abs(dx*sin+dy*cos)*2,box.lat);
+    const asp=pW/pH;
+    if(nW/asp>nH){box.rW=Math.max(50,nW);box.rH=box.rW/asp;}
+    else{box.rH=Math.max(50,nH);box.rW=box.rH*asp;}
+  } else if(drag.t==='side'){
+    const cp=map.latLngToContainerPoint([box.lat,box.lng]);
+    const cos=Math.cos(-box.ang),sin=Math.sin(-box.ang),dx=px-cp.x,dy=py-cp.y;
+    if(drag.n==='left'||drag.n==='right'){
+      box.rW=Math.max(50,pxToM(Math.abs(dx*cos-dy*sin)*2,box.lat));
+      pW=Math.max(1,Math.round(pH*(box.rW/box.rH)));
+      document.getElementById('pw').value=pW;
+    } else {
+      box.rH=Math.max(50,pxToM(Math.abs(dx*sin+dy*cos)*2,box.lat));
+      pH=Math.max(1,Math.round(pW*(box.rH/box.rW)));
+      document.getElementById('ph').value=pH;
+    }
+  }
+  drawRect();if(osmData)updateViz();
+});
+ic.addEventListener('mouseup',()=>{drag.on=false;map.dragging.enable();map.scrollWheelZoom.enable();});
+ic.addEventListener('mouseleave',()=>{if(drag.on){drag.on=false;map.dragging.enable();map.scrollWheelZoom.enable();}});
+ic.addEventListener('wheel',e=>{
+  e.preventDefault();
+  document.getElementById('map').dispatchEvent(new WheelEvent('wheel',{deltaY:e.deltaY,deltaX:e.deltaX,deltaMode:e.deltaMode,clientX:e.clientX,clientY:e.clientY,bubbles:true,cancelable:true}));
+},{passive:false});
+
+function redraw(){drawRect();if(osmData)updateViz();}
+map.on('move zoom moveend zoomend',redraw);
+
+// ══════════════════════════════════════════════
+// SIZE / ANGLE INPUTS
+// ══════════════════════════════════════════════
+function onSzW(){pW=parseInt(document.getElementById('pw').value)||150;box.rW=box.rH*(pW/pH);drawRect();}
+function onSzH(){pH=parseInt(document.getElementById('ph').value)||150;box.rH=box.rW*(pH/pW);drawRect();}
+function onAng(v){box.ang=(parseFloat(v)||0)*Math.PI/180;drawRect();}
+function flyTo(lat,lng){map.flyTo([lat,lng],15,{duration:1.2});setTimeout(()=>{box.lat=lat;box.lng=lng;drawRect();},1300);}
+
+// ══════════════════════════════════════════════
+// STEPS
+// ══════════════════════════════════════════════
+let step=1;
+function goStep(n){
+  if(n>1&&!osmData){setSt('Generate mesh first');return;}
+  step=n;
+  [1,2,3].forEach(i=>{
+    document.getElementById('st'+i).className='step'+(i===n?' active':i<n?' done':'');
+    document.getElementById('p'+i).className='panel'+(i===n?' active':'');
+  });
+  if(n!==2&&preview3D)closePreview();
+}
+
+// ══════════════════════════════════════════════
+// STATUS
+// ══════════════════════════════════════════════
+function setSt(t,spin=false){
+  document.getElementById('status-text').textContent=t;
+  document.getElementById('status-spinner').style.display=spin?'block':'none';
+}
+
+// ══════════════════════════════════════════════
+// TERRAIN — sample elevation from OpenTopoData
+// Uses a grid of points, free API, no key needed
+// ══════════════════════════════════════════════
+let terrainGrid=null; // 2D array of elevations
+const TERRAIN_RES=32; // 32x32 grid of elevation samples
+
+async function fetchTerrain(bb){
+  setSt('Fetching terrain elevation…',true);
+  // Build a grid of lat/lon points
+  const pts=[];
+  for(let row=0;row<TERRAIN_RES;row++){
+    for(let col=0;col<TERRAIN_RES;col++){
+      const lat=bb.S+(bb.N-bb.S)*(row/(TERRAIN_RES-1));
+      const lon=bb.W+(bb.E-bb.W)*(col/(TERRAIN_RES-1));
+      pts.push(`${lat.toFixed(6)},${lon.toFixed(6)}`);
+    }
+  }
+  // OpenTopoData supports up to 100 locations per call, so batch
+  const BATCH=100;
+  const elevations=[];
+  for(let i=0;i<pts.length;i+=BATCH){
+    const batch=pts.slice(i,i+BATCH).join('|');
+    const url=`https://api.opentopodata.org/v1/srtm30m?locations=${batch}`;
+    try{
+      const r=await fetch(url);
+      const d=await r.json();
+      d.results.forEach(res=>elevations.push(res.elevation||0));
+    }catch(e){
+      // If terrain fetch fails, fill with zeros
+      for(let j=0;j<Math.min(BATCH,pts.length-i);j++)elevations.push(0);
+    }
+    // Small delay to respect rate limit
+    if(i+BATCH<pts.length)await new Promise(r=>setTimeout(r,1100));
+  }
+  // Reshape into 2D grid
+  terrainGrid=[];
+  for(let row=0;row<TERRAIN_RES;row++){
+    terrainGrid.push(elevations.slice(row*TERRAIN_RES,(row+1)*TERRAIN_RES));
+  }
+  // Normalize: subtract min elevation
+  const minE=Math.min(...elevations.filter(e=>e!==null&&e!==undefined));
+  const maxE=Math.max(...elevations.filter(e=>e!==null&&e!==undefined));
+  terrainGrid=terrainGrid.map(row=>row.map(e=>(e||0)-minE));
+  return{min:0,max:maxE-minE};
+}
+
+function sampleTerrain(u,v){
+  // u,v in [0,1] — bilinear interpolation into terrain grid
+  if(!terrainGrid)return 0;
+  const x=u*(TERRAIN_RES-1),y=v*(TERRAIN_RES-1);
+  const x0=Math.floor(x),y0=Math.floor(y);
+  const x1=Math.min(x0+1,TERRAIN_RES-1),y1=Math.min(y0+1,TERRAIN_RES-1);
+  const fx=x-x0,fy=y-y0;
+  const v00=terrainGrid[y0][x0],v10=terrainGrid[y0][x1];
+  const v01=terrainGrid[y1][x0],v11=terrainGrid[y1][x1];
+  return v00*(1-fx)*(1-fy)+v10*fx*(1-fy)+v01*(1-fx)*fy+v11*fx*fy;
+}
+
+// ══════════════════════════════════════════════
+// OSM FETCH — FIXED query (no regex, simplified)
+// ══════════════════════════════════════════════
+let osmData=null;
+
+async function generate(){
+  const bb=getBB();
+  const btn=document.getElementById('btn-gen');
+  btn.disabled=true;btn.textContent='Fetching…';
+  setSt('Querying OpenStreetMap…',true);
+  terrainGrid=null;
+
+  // FIXED: Use pipe-separated list not regex, and use separate statements
+  // Regex like ~"^(primary|...)$" was causing XML error responses
+  const q=`[out:json][timeout:25];(
+way["building"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="primary"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="secondary"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="tertiary"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="residential"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="service"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["highway"="unclassified"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["natural"="water"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["waterway"="river"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["waterway"="canal"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["waterway"="stream"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["leisure"="park"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["landuse"="grass"](${bb.S},${bb.W},${bb.N},${bb.E});
+way["landuse"="recreation_ground"](${bb.S},${bb.W},${bb.N},${bb.E});
+node(w);
+);out body;`;
+
+  try{
+    const resp=await fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'data='+encodeURIComponent(q)
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const text=await resp.text();
+    // Check if we got XML error instead of JSON
+    if(text.trim().startsWith('<')){
+      // Extract error message from XML
+      const match=text.match(/<remark>([\s\S]*?)<\/remark>/);
+      throw new Error(match?match[1].trim():'Overpass returned XML error');
+    }
+    osmData=JSON.parse(text);
+    const nw=osmData.elements.filter(e=>e.type==='way').length;
+    const nb=osmData.elements.filter(e=>e.type==='way'&&e.tags?.building).length;
+    setSt(`✓ ${nw} features (${nb} buildings) — fetching terrain…`,true);
+    updateViz();
+
+    // Now fetch terrain
+    try{
+      const tInfo=await fetchTerrain(bb);
+      setSt(`✓ OSM + terrain ready · ${nw} features`,false);
+    }catch(te){
+      setSt(`✓ ${nw} features (terrain fetch failed — flat mode)`,false);
+    }
+
+    btn.textContent='Re-generate';btn.disabled=false;
+    goStep(2);
+  }catch(err){
+    setSt('Error: '+err.message);
+    btn.textContent='Generate mesh →';btn.disabled=false;
+    console.error(err);
+  }
+}
+
+// ══════════════════════════════════════════════
+// 2D MAP OVERLAY
+// ══════════════════════════════════════════════
+function updateViz(){
+  if(!osmData)return;
+  const ctx=dc.getContext('2d');
+  ctx.clearRect(0,0,dc.width,dc.height);
+  const nodes={};
+  osmData.elements.filter(e=>e.type==='node').forEach(n=>nodes[n.id]=n);
+  const proj=(lat,lon)=>{const p=map.latLngToContainerPoint([lat,lon]);return[p.x,p.y];};
+  const ways=osmData.elements.filter(e=>e.type==='way'&&e.nodes);
+  const c=getC();
+  ctx.save();
+  ctx.beginPath();ctx.moveTo(c.tl[0],c.tl[1]);ctx.lineTo(c.tr[0],c.tr[1]);ctx.lineTo(c.br[0],c.br[1]);ctx.lineTo(c.bl[0],c.bl[1]);ctx.closePath();ctx.clip();
+  const sB=document.getElementById('tB').checked,sR=document.getElementById('tR').checked;
+  const sW=document.getElementById('tW').checked,sP=document.getElementById('tP').checked;
+  if(sW){ctx.fillStyle='rgba(20,60,140,0.8)';ways.filter(w=>w.tags&&(w.tags.natural==='water'||w.tags.waterway)).forEach(w=>{polyP(ctx,w,nodes,proj);ctx.fill();});}
+  if(sP){ctx.fillStyle='rgba(29,158,117,0.35)';ways.filter(w=>w.tags&&(w.tags.leisure==='park'||w.tags.landuse)).forEach(w=>{polyP(ctx,w,nodes,proj);ctx.fill();});}
+  if(sB){ways.filter(w=>w.tags&&w.tags.building).forEach(w=>{
+    // Use building:levels * 3m if no height tag
+    const lvls=parseFloat(w.tags['building:levels']||0);
+    const hm=parseFloat(w.tags['building:height']||w.tags.height||0)||(lvls*3)||10;
+    ctx.fillStyle=`rgba(200,193,178,${Math.min(0.95,0.3+hm/70)})`;
+    ctx.strokeStyle='rgba(150,143,128,0.3)';ctx.lineWidth=0.5;
+    polyP(ctx,w,nodes,proj);ctx.fill();ctx.stroke();
+  });}
+  if(sR){ways.filter(w=>w.tags&&w.tags.highway).forEach(w=>{
+    const t=w.tags.highway;
+    ctx.strokeStyle='rgba(255,200,50,0.7)';
+    ctx.lineWidth=t==='primary'?3:t==='secondary'?2.2:t==='tertiary'?1.8:1;
+    lineP(ctx,w,nodes,proj);ctx.stroke();
+  });}
+  ctx.restore();
+}
+function polyP(ctx,w,n,p){if(!w.nodes||w.nodes.length<3)return;ctx.beginPath();w.nodes.forEach((id,i)=>{const nd=n[id];if(!nd)return;const[x,y]=p(nd.lat,nd.lon);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.closePath();}
+function lineP(ctx,w,n,p){if(!w.nodes||w.nodes.length<2)return;ctx.beginPath();w.nodes.forEach((id,i)=>{const nd=n[id];if(!nd)return;const[x,y]=p(nd.lat,nd.lon);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});}
+
+// ══════════════════════════════════════════════
+// GEOMETRY BUILDER
+// ══════════════════════════════════════════════
+function buildTris(){
+  const bb=getBB(),nodes={};
+  osmData.elements.filter(e=>e.type==='node').forEach(n=>nodes[n.id]=n);
+  const mL=(bb.N+bb.S)/2;
+  const rW=(bb.E-bb.W)*111320*Math.cos(mL*Math.PI/180),rH=(bb.N-bb.S)*111320;
+  const sx=pW/rW,sy=pH/rH;
+  const pm=(lat,lon)=>[(lon-bb.W)*111320*Math.cos(mL*Math.PI/180)*sx,(lat-bb.S)*111320*sy];
+  const tris=[];
+
+  const sB=document.getElementById('tB').checked,sR=document.getElementById('tR').checked;
+  const sW=document.getElementById('tW').checked,sP=document.getElementById('tP').checked;
+  const sT=document.getElementById('tT').checked;
+  const ways=osmData.elements.filter(e=>e.type==='way'&&e.nodes);
+
+  // Terrain base — build a mesh of quads
+  const TRES=sT&&terrainGrid?TERRAIN_RES:8;
+  const bH=H.base;
+  
+  if(sT&&terrainGrid){
+    // Get max terrain height for scale
+    const maxTerrE=Math.max(...terrainGrid.flat());
+    const terrScale=maxTerrE>0?(bH*H.terrain/maxTerrE):0;
+    
+    // Build terrain mesh — triangulated grid
+    for(let row=0;row<TRES-1;row++){
+      for(let col=0;col<TRES-1;col++){
+        const u0=col/(TRES-1),u1=(col+1)/(TRES-1);
+        const v0=row/(TRES-1),v1=(row+1)/(TRES-1);
+        const x0=u0*pW,x1=u1*pW,y0=v0*pH,y1=v1*pH;
+        const e00=bH+sampleTerrain(u0,v0)*terrScale;
+        const e10=bH+sampleTerrain(u1,v0)*terrScale;
+        const e01=bH+sampleTerrain(u0,v1)*terrScale;
+        const e11=bH+sampleTerrain(u1,v1)*terrScale;
+        tris.push([[x0,y0,e00],[x1,y0,e10],[x1,y1,e11]]);
+        tris.push([[x0,y0,e00],[x1,y1,e11],[x0,y1,e01]]);
+        // Sides going down to 0
+        tris.push([[x0,y0,0],[x1,y0,0],[x1,y0,e10]]);
+        tris.push([[x0,y0,0],[x1,y0,e10],[x0,y0,e00]]);
+      }
+    }
+    // Edge walls
+    for(let col=0;col<TRES-1;col++){
+      const u0=col/(TRES-1),u1=(col+1)/(TRES-1);
+      // bottom edge (v=0)
+      const x0=u0*pW,x1=u1*pW;
+      const e0=bH+sampleTerrain(u0,0)*terrScale,e1=bH+sampleTerrain(u1,0)*terrScale;
+      tris.push([[x0,0,0],[x0,0,e0],[x1,0,e1]]);
+      tris.push([[x0,0,0],[x1,0,e1],[x1,0,0]]);
+      // top edge (v=1)
+      const e0t=bH+sampleTerrain(u0,1)*terrScale,e1t=bH+sampleTerrain(u1,1)*terrScale;
+      tris.push([[x0,pH,e0t],[x0,pH,0],[x1,pH,0]]);
+      tris.push([[x0,pH,e0t],[x1,pH,0],[x1,pH,e1t]]);
+    }
+    for(let row=0;row<TRES-1;row++){
+      const v0=row/(TRES-1),v1=(row+1)/(TRES-1);
+      const y0=v0*pH,y1=v1*pH;
+      // left edge (u=0)
+      const e0=bH+sampleTerrain(0,v0)*terrScale,e1=bH+sampleTerrain(0,v1)*terrScale;
+      tris.push([[0,y0,e0],[0,y0,0],[0,y1,0]]);
+      tris.push([[0,y0,e0],[0,y1,0],[0,y1,e1]]);
+      // right edge (u=1)
+      const e0r=bH+sampleTerrain(1,v0)*terrScale,e1r=bH+sampleTerrain(1,v1)*terrScale;
+      tris.push([[pW,y0,0],[pW,y0,e0r],[pW,y1,e1r]]);
+      tris.push([[pW,y0,0],[pW,y1,e1r],[pW,y1,0]]);
+    }
+    // Bottom plate
+    tris.push([[0,0,0],[pW,0,0],[pW,pH,0]]);
+    tris.push([[0,0,0],[pW,pH,0],[0,pH,0]]);
+  } else {
+    // Flat base
+    addPoly([[0,0],[pW,0],[pW,pH],[0,pH],[0,0]],0,bH,tris);
+  }
+
+  ways.forEach(w=>{
+    if(!w.tags||!w.nodes)return;
+    const pts=w.nodes.map(id=>{const n=nodes[id];return n?pm(n.lat,n.lon):null;}).filter(Boolean);
+    if(pts.length<2)return;
+
+    if(sB&&w.tags.building){
+      // FIX: Use building:levels * 3m as fallback, then scale
+      const lvls=parseFloat(w.tags['building:levels']||0);
+      const hm=parseFloat(w.tags['building:height']||w.tags.height||0)||(lvls>0?lvls*3:10);
+      // Convert real metres to print mm using scale, then apply user multiplier
+      const bh=Math.max(0.4, hm*Math.min(sx,sy)*0.3*H.bldg);
+      if(sT&&terrainGrid){
+        // Place buildings on terrain surface
+        const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
+        const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
+        const u=Math.max(0,Math.min(1,cx/pW)),v=Math.max(0,Math.min(1,cy/pH));
+        const maxTerrE=Math.max(...terrainGrid.flat());
+        const terrScale=maxTerrE>0?(bH*H.terrain/maxTerrE):0;
+        const base=bH+sampleTerrain(u,v)*terrScale;
+        addPoly(pts,base,base+bh,tris);
+      } else {
+        addPoly(pts,bH,bH+bh,tris);
+      }
+    }
+
+    if(sP&&(w.tags.leisure==='park'||w.tags.landuse)){
+      addPoly(pts,bH,bH+H.parks,tris);
+    }
+
+    // Water: cut through the whole base (z from 0 to bH) — creates a recessed hole
+    if(sW&&(w.tags.natural==='water'||w.tags.waterway)){
+      // Recess water below base surface — goes down 80% of base thickness
+      addPoly(pts,bH*0.2,bH,tris,true); // inverted normals = hole effect
+    }
+
+    if(sR&&w.tags.highway){
+      const rw=w.tags.highway==='primary'?0.9:w.tags.highway==='secondary'?0.65:0.45;
+      for(let i=0;i<pts.length-1;i++){
+        const[x0,y0]=pts[i],[x1,y1]=pts[i+1];
+        const dx=x1-x0,dy=y1-y0,len=Math.sqrt(dx*dx+dy*dy);
+        if(len<0.01)continue;
+        const nx=-dy/len*rw/2,ny=dx/len*rw/2;
+        addPoly([[x0+nx,y0+ny],[x1+nx,y1+ny],[x1-nx,y1-ny],[x0-nx,y0-ny],[x0+nx,y0+ny]],bH,bH+H.roads,tris);
+      }
+    }
+  });
+
+  return tris;
+}
+
+function addPoly(pts,z0,z1,tris,flip=false){
+  if(pts.length<3)return;
+  const n=pts.length-1;
+  for(let i=0;i<n-1;i++){
+    const[x0,y0]=pts[i],[x1,y1]=pts[i+1];
+    if(!flip){
+      tris.push([[x0,y0,z0],[x1,y1,z0],[x1,y1,z1]]);
+      tris.push([[x0,y0,z0],[x1,y1,z1],[x0,y0,z1]]);
+    } else {
+      tris.push([[x1,y1,z1],[x1,y1,z0],[x0,y0,z0]]);
+      tris.push([[x0,y0,z1],[x1,y1,z1],[x0,y0,z0]]);
+    }
+  }
+  const top=pts.slice(0,n);
+  for(let i=1;i<top.length-1;i++){
+    if(!flip){
+      tris.push([[top[0][0],top[0][1],z1],[top[i][0],top[i][1],z1],[top[i+1][0],top[i+1][1],z1]]);
+      tris.push([[top[0][0],top[0][1],z0],[top[i+1][0],top[i+1][1],z0],[top[i][0],top[i][1],z0]]);
+    } else {
+      tris.push([[top[i+1][0],top[i+1][1],z1],[top[i][0],top[i][1],z1],[top[0][0],top[0][1],z1]]);
+      tris.push([[top[i][0],top[i][1],z0],[top[i+1][0],top[i+1][1],z0],[top[0][0],top[0][1],z0]]);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+// 3D PREVIEW — FIXED orbit controls
+// ══════════════════════════════════════════════
+let preview3D=false,threeR=null,threeRaf=null;
+
+function toggle3D(){
+  preview3D=!preview3D;
+  document.getElementById('mapwrap').style.display=preview3D?'none':'flex';
+  document.getElementById('preview').style.display=preview3D?'flex':'none';
+  document.getElementById('btn3d').textContent=preview3D?'Back to map':'View 3D mesh';
+  if(preview3D)build3D();else closePreview();
+}
+function closePreview(){
+  preview3D=false;
+  document.getElementById('mapwrap').style.display='flex';
+  document.getElementById('preview').style.display='none';
+  document.getElementById('btn3d').textContent='View 3D mesh';
+  if(threeRaf){cancelAnimationFrame(threeRaf);threeRaf=null;}
+  if(threeR){threeR.dispose();threeR=null;}
+}
+function rebuild3D(){if(preview3D){const p3=preview3D;closePreview();preview3D=true;document.getElementById('mapwrap').style.display='none';document.getElementById('preview').style.display='flex';document.getElementById('btn3d').textContent='Back to map';build3D();}}
+
+function build3D(){
+  if(!osmData)return;
+  const canvas=document.getElementById('pcanvas');
+  const wrap=document.getElementById('preview');
+  const W=wrap.offsetWidth,H2=wrap.offsetHeight;
+  if(!W||!H2)return;
+
+  if(threeR)threeR.dispose();
+  threeR=new THREE.WebGLRenderer({canvas,antialias:true});
+  threeR.setSize(W,H2);
+  threeR.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  threeR.setClearColor(0x060606);
+  threeR.shadowMap.enabled=false;
+
+  const scene=new THREE.Scene();
+  const cx=pW/2,cy=pH/2,maxD=Math.max(pW,pH);
+
+  scene.add(new THREE.AmbientLight(0xffffff,0.4));
+  const dl=new THREE.DirectionalLight(0xffffff,0.75);dl.position.set(1,0.8,2);scene.add(dl);
+  const dl2=new THREE.DirectionalLight(0x4466cc,0.3);dl2.position.set(-1,-0.5,0.5);scene.add(dl2);
+  const dl3=new THREE.DirectionalLight(0xffffff,0.2);dl3.position.set(0,-1,0.3);scene.add(dl3);
+
+  setSt('Building 3D mesh…',true);
+  const tris=buildTris();
+
+  const verts=new Float32Array(tris.length*9);
+  const norms=new Float32Array(tris.length*9);
+  tris.forEach(([v0,v1,v2],i)=>{
+    const ax=v1[0]-v0[0],ay=v1[1]-v0[1],az=v1[2]-v0[2];
+    const bx=v2[0]-v0[0],by=v2[1]-v0[1],bz=v2[2]-v0[2];
+    const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
+    const nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+    [v0,v1,v2].forEach((v,j)=>{
+      const b=(i*3+j)*3;
+      verts[b]=v[0];verts[b+1]=v[1];verts[b+2]=v[2];
+      norms[b]=nx/nl;norms[b+1]=ny/nl;norms[b+2]=nz/nl;
+    });
+  });
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(verts,3));
+  geo.setAttribute('normal',new THREE.BufferAttribute(norms,3));
+  const mat=new THREE.MeshPhongMaterial({color:0xbcb8ae,specular:0x111111,shininess:10,side:THREE.DoubleSide});
+  scene.add(new THREE.Mesh(geo,mat));
+
+  setSt(`3D ready · ${tris.length.toLocaleString()} triangles`,false);
+
+  // FIXED orbit: proper spherical coordinates around model center
+  const target=new THREE.Vector3(cx,cy,H.base);
+  let theta=Math.PI/4,phi=Math.PI/3,radius=maxD*1.8;
+
+  const camera=new THREE.PerspectiveCamera(45,W/H2,0.1,100000);
+  function updateCam(){
+    camera.position.set(
+      target.x+radius*Math.sin(phi)*Math.cos(theta),
+      target.y+radius*Math.sin(phi)*Math.sin(theta),
+      target.z+radius*Math.cos(phi)
+    );
+    camera.lookAt(target);
+  }
+  updateCam();
+
+  let mouseDown=false,rightDown=false,lastX=0,lastY=0;
+  canvas.addEventListener('mousedown',e=>{
+    if(e.button===0)mouseDown=true;
+    if(e.button===2)rightDown=true;
+    lastX=e.clientX;lastY=e.clientY;
+    e.preventDefault();
+  });
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  window.addEventListener('mouseup',e=>{
+    if(e.button===0)mouseDown=false;
+    if(e.button===2)rightDown=false;
+  });
+  canvas.addEventListener('mousemove',e=>{
+    const dx=e.clientX-lastX,dy=e.clientY-lastY;
+    lastX=e.clientX;lastY=e.clientY;
+    if(mouseDown){
+      // Orbit
+      theta-=dx*0.008;
+      phi=Math.max(0.05,Math.min(Math.PI*0.95,phi+dy*0.006));
+      updateCam();
+    }
+    if(rightDown){
+      // Pan
+      const right=new THREE.Vector3().crossVectors(
+        new THREE.Vector3().subVectors(target,camera.position),
+        new THREE.Vector3(0,0,1)
+      ).normalize();
+      const up=new THREE.Vector3(0,0,1);
+      const panSpeed=radius*0.001;
+      target.addScaledVector(right,-dx*panSpeed);
+      target.addScaledVector(up,dy*panSpeed);
+      updateCam();
+    }
+  });
+  canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    radius=Math.max(5,radius*Math.pow(1.001,e.deltaY));
+    updateCam();
+  },{passive:false});
+
+  const animate=()=>{threeRaf=requestAnimationFrame(animate);threeR.render(scene,camera);};
+  animate();
+}
+
+// ══════════════════════════════════════════════
+// SPLIT + EXPORT
+// ══════════════════════════════════════════════
+function updSplit(){
+  const cols=parseInt(document.getElementById('scols').value)||1;
+  const rows=parseInt(document.getElementById('srows').value)||1;
+  const cW=Math.round(pW/cols),cH=Math.round(pH/rows);
+  const el=document.getElementById('split-grid');
+  el.style.gridTemplateColumns=`repeat(${cols},1fr)`;el.innerHTML='';
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const d=document.createElement('div');d.className='sc';d.textContent=`${cW}×${cH}`;el.appendChild(d);}
+  document.getElementById('split-note').textContent=cols*rows>1?`${cols*rows} files · ${cW}×${cH}mm each`:'single file';
+  drawRect();
+}
+
+function exportSTL(){
+  if(!osmData){setSt('Generate mesh first');return;}
+  setSt('Building STL…',true);
+  const cols=parseInt(document.getElementById('scols').value)||1;
+  const rows=parseInt(document.getElementById('srows').value)||1;
+  const allTris=buildTris();
+  if(cols===1&&rows===1){dlSTL(allTris,`map_${pW}x${pH}mm`);setSt(`Exported · ${allTris.length.toLocaleString()} triangles`);return;}
+  const pw2=pW/cols,ph2=pH/rows;let cnt=0;
+  for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+    const x0=col*pw2,x1=(col+1)*pw2,y0=row*ph2,y1=(row+1)*ph2;
+    const piece=allTris.filter(([v0,v1,v2])=>{const mx=(v0[0]+v1[0]+v2[0])/3,my=(v0[1]+v1[1]+v2[1])/3;return mx>=x0&&mx<x1&&my>=y0&&my<y1;})
+      .map(([v0,v1,v2])=>[[v0[0]-x0,v0[1]-y0,v0[2]],[v1[0]-x0,v1[1]-y0,v1[2]],[v2[0]-x0,v2[1]-y0,v2[2]]]);
+    setTimeout(()=>dlSTL(piece,`map_r${row+1}c${col+1}_${Math.round(pw2)}x${Math.round(ph2)}mm`),cnt*350);cnt++;
+  }
+  setSt(`Exporting ${cols*rows} pieces…`);
+}
+
+function dlSTL(tris,name){
+  const buf=new ArrayBuffer(84+tris.length*50),dv=new DataView(buf);
+  new TextEncoder().encodeInto('Map3DPrint',new Uint8Array(buf,0,80));
+  dv.setUint32(80,tris.length,true);let off=84;
+  tris.forEach(([v0,v1,v2])=>{
+    const ax=v1[0]-v0[0],ay=v1[1]-v0[1],az=v1[2]-v0[2],bx=v2[0]-v0[0],by=v2[1]-v0[1],bz=v2[2]-v0[2];
+    const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+    [nx/nl,ny/nl,nz/nl].forEach(v=>{dv.setFloat32(off,v,true);off+=4;});
+    [v0,v1,v2].forEach(v=>{v.forEach(c=>{dv.setFloat32(off,c,true);off+=4;});});
+    dv.setUint16(off,0,true);off+=2;
+  });
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'application/octet-stream'}));a.download=name+'.stl';a.click();
+}
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+syncAsp();drawRect();updSplit();
+</script>
+</body>
+</html>
